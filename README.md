@@ -1,4 +1,4 @@
-﻿# Waygood Study Abroad Candidate Evaluation Starter
+# Waygood Study Abroad Candidate Evaluation Starter
 
 This repository is a starter assignment for backend-focused MERN candidates interviewing with Waygood.
 
@@ -118,7 +118,23 @@ A strong submission can usually be completed in 6-8 focused hours. We care more 
 
 ## Getting Started
 
-### 1. Backend setup
+### Using Docker (Recommended)
+
+You can spin up the entire backend stack (Express API + MongoDB) using Docker Compose:
+
+```bash
+docker compose up -d --build
+```
+
+To seed the local Docker database instance with sample data, run:
+
+```bash
+docker exec -it waygood_backend npm run seed
+```
+
+The API will then be available at `http://localhost:4000`.
+
+### 1. Backend setup (Manual Local Setup)
 
 ```bash
 cd backend
@@ -176,3 +192,20 @@ Along with this README, a Word assignment brief is available at:
 
 - Waygood website: student discovery, AI tools, calculators, and partner-university positioning
 - Job description: backend APIs, MongoDB aggregation, performance optimization, caching, and AI integration
+
+## Waygood Project Submission Documentation
+
+### Setup & Run Instructions
+1. We have provided a fully containerized Docker setup. Run `docker compose up -d --build` to spin up both the Express API and MongoDB instance.
+2. Seed the database with sample data: `docker exec -it waygood_backend npm run seed`
+3. API runs seamlessly on `http://localhost:4000`. 
+4. The `.env` environment is configured automatically through Docker via `./backend/.env.example` logic.
+
+### Architecture Decisions
+* **Authentication**: Used `bcryptjs` and `jsonwebtoken` for secure JWT-based stateless authentication preventing session hijack via signed tokens.
+* **Aggregations**: Overhauled Node.js in-memory mapping to use deep MongoDB Aggregation `$match` and `$addFields` arrays. This delegates computation to the optimized C++ database layer rather than blocking the Javascript event loop.
+* **Caching**: Utilized an optimized LRU memory cache for `/api/universities/popular` to combat intensive sorting.
+
+### Assumptions
+* Target countries and fields strictly conform to identical string formatting locally vs DB.
+* Redis was evaluated but skipped for a local node `Map` caching mechanism to limit overarching deployment complexity while still serving fast hits.

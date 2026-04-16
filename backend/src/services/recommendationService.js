@@ -1,45 +1,6 @@
-﻿const Program = require("../models/Program");
+const Program = require("../models/Program");
 const Student = require("../models/Student");
 const HttpError = require("../utils/httpError");
-
-function calculateScore(student, program) {
-  let score = 0;
-  const reasons = [];
-
-  if (student.targetCountries.includes(program.country)) {
-    score += 35;
-    reasons.push(`Preferred country match: ${program.country}`);
-  }
-
-  if (
-    student.interestedFields.some((field) =>
-      program.field.toLowerCase().includes(field.toLowerCase())
-    )
-  ) {
-    score += 30;
-    reasons.push(`Field alignment: ${program.field}`);
-  }
-
-  if (student.maxBudgetUsd >= program.tuitionFeeUsd) {
-    score += 20;
-    reasons.push("Within budget range");
-  }
-
-  if (student.preferredIntake && program.intakes.includes(student.preferredIntake)) {
-    score += 10;
-    reasons.push(`Preferred intake available: ${student.preferredIntake}`);
-  }
-
-  if ((student.englishTest?.score || 0) >= program.minimumIelts) {
-    score += 5;
-    reasons.push("English test score meets requirement");
-  }
-
-  return {
-    score,
-    reasons,
-  };
-}
 
 async function buildProgramRecommendations(studentId) {
   const student = await Student.findById(studentId).lean();
@@ -48,23 +9,65 @@ async function buildProgramRecommendations(studentId) {
     throw new HttpError(404, "Student not found.");
   }
 
-  const candidatePrograms = await Program.find({
-    country: { $in: student.targetCountries },
-  })
-    .limit(25)
-    .lean();
+  const targetCountries = student.targetCountries || [];
+  const interestedFields = student.interestedFields || [];
+  const maxBudget = student.maxBudgetUsd || 0;
+  const prefIntake = student.preferredIntake || "";
+  const ieltsScore = student.englishTest?.score || 0;
 
-  const recommendations = candidatePrograms
-    .map((program) => {
-      const { score, reasons } = calculateScore(student, program);
-      return {
-        ...program,
-        matchScore: score,
-        reasons,
-      };
-    })
-    .sort((left, right) => right.matchScore - left.matchScore)
-    .slice(0, 5);
+  const pipeline = [
+    {
+      $match: {
+        country: { $in: targetCountries },
+      },
+    },
+    {
+      $addFields: {
+        matchScore: {
+          $add: [
+            35,
+            {
+              $cond: [
+                {
+                  $gt: [
+                    {
+                      $size: {
+                        $filter: {
+                          input: interestedFields,
+                          as: "iField",
+                          cond: { $eq: ["$$iField", "$field"] }
+                        }
+                      }
+                    },
+                    0
+                  ]
+                },
+                30,
+                0,
+              ],
+            },
+            {
+              $cond: [{ $lte: ["$tuitionFeeUsd", maxBudget] }, 20, 0],
+            },
+            {
+              $cond: [{ $in: [prefIntake, { $ifNull: ["$intakes", []] }] }, 10, 0],
+            },
+            {
+              $cond: [{ $lte: ["$minimumIelts", ieltsScore] }, 5, 0],
+            },
+          ],
+        },
+      },
+    },
+    {
+      $sort: { matchScore: -1 },
+    },
+    {
+      $limit: 5,
+    },
+  ];
+
+  const recommendations = await Program.aggregate(pipeline);
 
   return {
     data: {
@@ -77,8 +80,7 @@ async function buildProgramRecommendations(studentId) {
       recommendations,
     },
     meta: {
-      implementationStatus:
-        "starter-scoring-in-javascript-replace-with-mongodb-aggregation",
+      implementationStatus: "mongodb-aggregation-complete",
     },
   };
 }

@@ -1,4 +1,4 @@
-﻿const Program = require("../models/Program");
+const Program = require("../models/Program");
 const asyncHandler = require("../utils/asyncHandler");
 
 function parseBoolean(value) {
@@ -24,19 +24,19 @@ const listPrograms = asyncHandler(async (req, res) => {
   const filters = {};
 
   if (country) {
-    filters.country = country;
+    filters.country = { $in: country.split(",").map((c) => c.trim()) };
   }
 
   if (degreeLevel) {
-    filters.degreeLevel = degreeLevel;
+    filters.degreeLevel = { $in: degreeLevel.split(",").map((d) => d.trim()) };
   }
 
   if (field) {
-    filters.field = field;
+    filters.field = { $in: field.split(",").map((f) => f.trim()) };
   }
 
   if (intake) {
-    filters.intakes = intake;
+    filters.intakes = { $in: intake.split(",").map((i) => i.trim()) };
   }
 
   if (maxTuition) {
