@@ -4,48 +4,41 @@ const Student = require("../models/Student");
 const asyncHandler = require("../utils/asyncHandler");
 const HttpError = require("../utils/httpError");
 
-function generateToken(user) {
-  return jwt.sign(
-    { sub: user._id, role: user.role },
-    env.jwtSecret,
-    { expiresIn: env.jwtExpiresIn }
-  );
-}
+const generateToken = (id) => {
+  return jwt.sign({ sub: id }, env.jwtSecret, {
+    expiresIn: env.jwtExpiresIn,
+  });
+};
 
 const register = asyncHandler(async (req, res) => {
-  const { email, password, fullName, role, targetCountries, interestedFields, preferredIntake, maxBudgetUsd } = req.body;
+  const { fullName, email, password } = req.body;
 
-  if (!email || !password || !fullName) {
-    throw new HttpError(400, "Please provide full name, email, and password.");
+  if (!fullName || !email || !password) {
+    throw new HttpError(400, "Please provide fullName, email, and password.");
   }
 
-  const existingUser = await Student.findOne({ email: email.toLowerCase() });
-  if (existingUser) {
-    throw new HttpError(409, "User with this email already exists.");
+  const existingStudent = await Student.findOne({ email });
+  if (existingStudent) {
+    throw new HttpError(400, "User already exists with this email.");
   }
 
-  const student = await Student.create({
+  const newStudent = await Student.create({
+    fullName,
     email,
     password,
-    fullName,
-    role,
-    targetCountries,
-    interestedFields,
-    preferredIntake,
-    maxBudgetUsd,
   });
 
-  const token = generateToken(student);
+  const token = generateToken(newStudent._id);
 
   res.status(201).json({
-    success: true,
+    status: "success",
     data: {
       token,
       user: {
-        id: student._id,
-        email: student.email,
-        fullName: student.fullName,
-        role: student.role,
+        _id: newStudent._id,
+        fullName: newStudent.fullName,
+        email: newStudent.email,
+        role: newStudent.role,
       },
     },
   });
@@ -58,26 +51,21 @@ const login = asyncHandler(async (req, res) => {
     throw new HttpError(400, "Please provide email and password.");
   }
 
-  const student = await Student.findOne({ email: email.toLowerCase() });
-  if (!student) {
+  const student = await Student.findOne({ email });
+  if (!student || !(await student.comparePassword(password))) {
     throw new HttpError(401, "Invalid email or password.");
   }
 
-  const isMatch = await student.comparePassword(password);
-  if (!isMatch) {
-    throw new HttpError(401, "Invalid email or password.");
-  }
+  const token = generateToken(student._id);
 
-  const token = generateToken(student);
-
-  res.json({
-    success: true,
+  res.status(200).json({
+    status: "success",
     data: {
       token,
       user: {
-        id: student._id,
-        email: student.email,
+        _id: student._id,
         fullName: student.fullName,
+        email: student.email,
         role: student.role,
       },
     },
@@ -85,9 +73,11 @@ const login = asyncHandler(async (req, res) => {
 });
 
 const me = asyncHandler(async (req, res) => {
-  res.json({
-    success: true,
-    data: req.user,
+  res.status(200).json({
+    status: "success",
+    data: {
+      user: req.user,
+    },
   });
 });
 

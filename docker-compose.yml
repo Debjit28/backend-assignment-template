@@ -1,35 +1,46 @@
 version: '3.8'
 
 services:
-  mongodb:
-    image: mongo:7
-    container_name: waygood_mongodb
+  mongo:
+    image: mongo:latest
+    container_name: waygood-mongo
     ports:
-      - "27017:27017"
+      - '27017:27017'
     volumes:
-      - mongodb_data:/data/db
-    restart: unless-stopped
+      - mongo-data:/data/db
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: waygood_backend
+    container_name: waygood-backend
     ports:
-      - "4000:4000"
+      - '4000:4000'
     environment:
+      - MONGODB_URI=mongodb://mongo:27017/waygood-evaluation
       - PORT=4000
-      - MONGODB_URI=mongodb://mongodb:27017/waygood-evaluation
-      - JWT_SECRET=replace-with-a-long-secret
-      - JWT_EXPIRES_IN=1d
-      - CACHE_TTL_SECONDS=300
-    depends_on:
-      - mongodb
-    restart: unless-stopped
-    command: npm run dev
     volumes:
-      - ./backend:/usr/src/app
-      - /usr/src/app/node_modules
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      - mongo
+    command: npm run dev
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: waygood-frontend
+    ports:
+      - '5173:5173'
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    command: npm run dev -- --host
+    depends_on:
+      - backend
 
 volumes:
-  mongodb_data:
+  mongo-data:

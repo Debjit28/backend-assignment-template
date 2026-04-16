@@ -1,5 +1,6 @@
 const Application = require("../models/Application");
-const { applicationStatuses, validStatusTransitions } = require("../config/constants");
+const Program = require("../models/Program");
+const { validStatusTransitions } = require("../config/constants");
 const asyncHandler = require("../utils/asyncHandler");
 const HttpError = require("../utils/httpError");
 
@@ -29,26 +30,35 @@ const listApplications = asyncHandler(async (req, res) => {
 });
 
 const createApplication = asyncHandler(async (req, res) => {
-  const { studentId, programId, universityId, destinationCountry, intake } = req.body;
+  const { studentId, programId, intake } = req.body;
 
-  if (!studentId || !programId || !universityId || !destinationCountry || !intake) {
-    throw new HttpError(400, "Please provide all required application fields.");
+  if (!studentId || !programId || !intake) {
+    throw new HttpError(400, "studentId, programId, and intake are required.");
   }
 
-  // Prevent duplicate applications for the same student + program + intake
-  const existingApp = await Application.findOne({ student: studentId, program: programId, intake });
-  if (existingApp) {
-    throw new HttpError(409, "An application for this program and intake already exists.");
+  const program = await Program.findById(programId);
+  if (!program) {
+    throw new HttpError(404, "Program not found.");
+  }
+
+  const existingApplication = await Application.findOne({
+    student: studentId,
+    program: programId,
+    intake,
+  });
+
+  if (existingApplication) {
+    throw new HttpError(400, "You have already applied to this program for the selected intake.");
   }
 
   const application = await Application.create({
     student: studentId,
     program: programId,
-    university: universityId,
-    destinationCountry,
+    university: program.university,
+    destinationCountry: program.country,
     intake,
-    status: "submitted",
-    timeline: [{ status: "submitted", note: "Application submitted.", changedAt: new Date() }],
+    status: "draft",
+    timeline: [{ status: "draft", note: "Application created." }],
   });
 
   res.status(201).json({
@@ -62,11 +72,7 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
   const { status, note } = req.body;
 
   if (!status) {
-    throw new HttpError(400, "Please provide a status.");
-  }
-
-  if (!applicationStatuses.includes(status)) {
-    throw new HttpError(400, `Invalid status. Must be one of: ${applicationStatuses.join(", ")}`);
+    throw new HttpError(400, "Status is required.");
   }
 
   const application = await Application.findById(id);
@@ -74,25 +80,23 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
     throw new HttpError(404, "Application not found.");
   }
 
-  // Enforce valid status transitions using the transition map
-  const allowedNextStatuses = validStatusTransitions[application.status] || [];
-  if (!allowedNextStatuses.includes(status)) {
+  const allowedTransitions = validStatusTransitions[application.status] || [];
+  if (!allowedTransitions.includes(status)) {
     throw new HttpError(
       400,
-      `Cannot transition from "${application.status}" to "${status}". Allowed transitions: ${allowedNextStatuses.join(", ") || "none (final state)"}.`
+      `Invalid status transition from '${application.status}' to '${status}'.`
     );
   }
 
   application.status = status;
   application.timeline.push({
     status,
-    note: note || `Status changed to ${status}.`,
-    changedAt: new Date(),
+    note: note || `Status updated to ${status}.`,
   });
 
   await application.save();
 
-  res.json({
+  res.status(200).json({
     success: true,
     data: application,
   });

@@ -118,23 +118,7 @@ A strong submission can usually be completed in 6-8 focused hours. We care more 
 
 ## Getting Started
 
-### Using Docker (Recommended)
-
-You can spin up the entire backend stack (Express API + MongoDB) using Docker Compose:
-
-```bash
-docker compose up -d --build
-```
-
-To seed the local Docker database instance with sample data, run:
-
-```bash
-docker exec -it waygood_backend npm run seed
-```
-
-The API will then be available at `http://localhost:4000`.
-
-### 1. Backend setup (Manual Local Setup)
+### 1. Backend setup
 
 ```bash
 cd backend
@@ -193,19 +177,29 @@ Along with this README, a Word assignment brief is available at:
 - Waygood website: student discovery, AI tools, calculators, and partner-university positioning
 - Job description: backend APIs, MongoDB aggregation, performance optimization, caching, and AI integration
 
-## Waygood Project Submission Documentation
+---
+## Candidate Submission Notes
 
-### Setup & Run Instructions
-1. We have provided a fully containerized Docker setup. Run `docker compose up -d --build` to spin up both the Express API and MongoDB instance.
-2. Seed the database with sample data: `docker exec -it waygood_backend npm run seed`
-3. API runs seamlessly on `http://localhost:4000`. 
-4. The `.env` environment is configured automatically through Docker via `./backend/.env.example` logic.
+### 1. Setup Instructions
+I have containerized the entire stack for easy reviewer evaluation. To spin up the database, backend, and frontend concurrently without manual config:
+```bash
+docker compose up -d --build
+```
+This will automatically map port `4000` to the Node backend, `5173` to Vite, and `27017` to MongoDB. 
 
-### Architecture Decisions
-* **Authentication**: Used `bcryptjs` and `jsonwebtoken` for secure JWT-based stateless authentication preventing session hijack via signed tokens.
-* **Aggregations**: Overhauled Node.js in-memory mapping to use deep MongoDB Aggregation `$match` and `$addFields` arrays. This delegates computation to the optimized C++ database layer rather than blocking the Javascript event loop.
-* **Caching**: Utilized an optimized LRU memory cache for `/api/universities/popular` to combat intensive sorting.
+> **Alternative Local Setup**: Ensure MongoDB is running on port `27017` and run `npm run dev` in both frontend and backend directories.
 
-### Assumptions
-* Target countries and fields strictly conform to identical string formatting locally vs DB.
-* Redis was evaluated but skipped for a local node `Map` caching mechanism to limit overarching deployment complexity while still serving fast hits.
+_Testing:_ I've implemented a mocked Mongoose test suite using `jest` and `supertest`. To run the API critical flow tests:
+```bash
+cd backend
+npm run test
+```
+
+### 2. Architecture & Implementation Decisions
+- **Authentication**: Using JSON Web Tokens (JWT) for stateless sessions and `bcryptjs` hashing securely applied via a Mongoose pre-save hook.
+- **Recommendation Engine**: Fully transitioned from the `O(N)` Javascript loop to a native **MongoDB Aggregation Pipeline**. This handles `matchScore` conditional summation (`$cond` and `$regexMatch`) directly within the database and sorts prior to returning.
+- **Application Workflow**: Built out state transitions via a predefined mapping (`validStatusTransitions`). This strict mapping effectively guards against irregular data flows (e.g., jump from "draft" directly to "enrolled").
+
+### 3. Performance & Optimizations
+- Implemented robust MongoDB Compound Indexes in Mongoose schemas specifically for fields heavily hit during advanced discovery modes (like `{ country: 1, degreeLevel: 1, field: 1, tuitionFeeUsd: 1 }`).
+- Leveraged the in-memory `MemoryCacheService` cache for endpoints that don't need real-time data accuracy, like `listPopularUniversities`.

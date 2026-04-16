@@ -9,59 +9,109 @@ async function buildProgramRecommendations(studentId) {
     throw new HttpError(404, "Student not found.");
   }
 
-  const targetCountries = student.targetCountries || [];
-  const interestedFields = student.interestedFields || [];
-  const maxBudget = student.maxBudgetUsd || 0;
-  const prefIntake = student.preferredIntake || "";
-  const ieltsScore = student.englishTest?.score || 0;
+  // Create a regex pattern for field matching, e.g., "(Computer|Data)"
+  let fieldRegexPattern = null;
+  if (student.interestedFields && student.interestedFields.length > 0) {
+    fieldRegexPattern = student.interestedFields
+      .map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("|");
+  }
 
   const pipeline = [
-    {
-      $match: {
-        country: { $in: targetCountries },
-      },
-    },
     {
       $addFields: {
         matchScore: {
           $add: [
-            35,
+            // 1. Preferred country match: 35 points
             {
               $cond: [
                 {
-                  $gt: [
-                    {
-                      $size: {
-                        $filter: {
-                          input: interestedFields,
-                          as: "iField",
-                          cond: { $eq: ["$$iField", "$field"] }
-                        }
-                      }
-                    },
-                    0
-                  ]
+                  $in: [
+                    "$country",
+                    student.targetCountries && student.targetCountries.length > 0
+                      ? student.targetCountries
+                      : [],
+                  ],
                 },
-                30,
+                35,
                 0,
               ],
             },
+            // 2. Field alignment match: 30 points
+            fieldRegexPattern
+              ? {
+                  $cond: [
+                    {
+                      $regexMatch: {
+                        input: "$field",
+                        regex: fieldRegexPattern,
+                        options: "i",
+                      },
+                    },
+                    30,
+                    0,
+                  ],
+                }
+              : 0,
+            // 3. Within budget match: 20 points
             {
-              $cond: [{ $lte: ["$tuitionFeeUsd", maxBudget] }, 20, 0],
+              $cond: [
+                {
+                  $lte: [
+                    "$tuitionFeeUsd",
+                    student.maxBudgetUsd || 9999999,
+                  ],
+                },
+                20,
+                0,
+              ],
             },
+            // 4. Preferred intake match: 10 points
             {
-              $cond: [{ $in: [prefIntake, { $ifNull: ["$intakes", []] }] }, 10, 0],
+              $cond: [
+                {
+                  $and: [
+                    { $ne: [student.preferredIntake || null, null] },
+                    {
+                      $in: [
+                        student.preferredIntake || "",
+                        { $ifNull: ["$intakes", []] },
+                      ],
+                    },
+                  ],
+                },
+                10,
+                0,
+              ],
             },
+            // 5. English test score meets requirement: 5 points
             {
-              $cond: [{ $lte: ["$minimumIelts", ieltsScore] }, 5, 0],
+              $cond: [
+                {
+                  $lte: [
+                    "$minimumIelts",
+                    student.englishTest?.score || 0,
+                  ],
+                },
+                5,
+                0,
+              ],
             },
           ],
         },
       },
     },
+    // Filter out programs with a low match score (optional, we'll return top anyways)
     {
-      $sort: { matchScore: -1 },
+      $match: {
+        matchScore: { $gt: 0 },
+      },
     },
+    // Sort by matchScore descending
+    {
+      $sort: { matchScore: -1, tuitionFeeUsd: 1 },
+    },
+    // Limit to top 5 recommendations
     {
       $limit: 5,
     },
@@ -80,7 +130,7 @@ async function buildProgramRecommendations(studentId) {
       recommendations,
     },
     meta: {
-      implementationStatus: "mongodb-aggregation-complete",
+      implementationStatus: "completed-using-mongodb-aggregation",
     },
   };
 }

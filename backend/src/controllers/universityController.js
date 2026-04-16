@@ -1,4 +1,4 @@
-const University = require("../models/University");
+﻿const University = require("../models/University");
 const cacheService = require("../services/cacheService");
 const asyncHandler = require("../utils/asyncHandler");
 
@@ -22,7 +22,7 @@ const listUniversities = asyncHandler(async (req, res) => {
   const filters = {};
 
   if (country) {
-    filters.country = { $in: country.split(",").map((c) => c.trim()) };
+    filters.country = country;
   }
 
   if (partnerType) {

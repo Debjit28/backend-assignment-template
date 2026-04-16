@@ -1,4 +1,4 @@
-const bcrypt = require("bcryptjs");
+﻿const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
 
 const studentSchema = new mongoose.Schema(
@@ -61,8 +61,5 @@ studentSchema.pre("save", async function hashPassword(next) {
 studentSchema.methods.comparePassword = function comparePassword(password) {
   return bcrypt.compare(password, this.password);
 };
-
-// Index for fast email lookups during authentication
-studentSchema.index({ email: 1 });
 
 module.exports = mongoose.model("Student", studentSchema);
